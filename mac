@@ -1,0 +1,229 @@
+#!/bin/sh
+
+# set up vars
+notify() { echo "-----> $1"; }
+info()   { echo "       $1"; }
+
+trap 'ret=$?; test $ret -ne 0 && printf "failed\n\n" >&2; exit $ret' EXIT
+
+set -e
+
+notify "✨  Let's get started! ✨"
+
+brew_ensure() {
+  for pkg in "$@"; do
+    if [[ -z $(brew list "$pkg" 2>/dev/null) ]]; then
+      notify "Installing $pkg"
+      brew install $pkg
+    else
+      if [[ -n $(brew outdated "$pkg" 2>/dev/null) ]]; then
+        notify "Upgrading $pkg"
+        brew upgrade $pkg
+        brew cleanup $pkg
+      fi
+    fi
+  done
+}
+
+cask_ensure() {
+  for pkg in "$@"; do
+    if [[ ! $(brew cask list | grep $pkg) == "$pkg" ]]; then
+      notify "Installing $pkg"
+      brew cask install $pkg
+    fi
+  done
+}
+
+# configure .gitconfig
+# from holman/dotfiles
+if ! [ -f gitconfig ]; then
+  notify "Configuring your .gitconfig"
+  git_credential='osxkeychain'
+
+  info "What is your git author name?"
+  read -e git_authorname
+  info "What is your git author email?"
+  read -e git_authoremail
+
+  sed -e "s/AUTHORNAME/$git_authorname/g" -e "s/AUTHOREMAIL/$git_authoremail/g" -e "s/GIT_CREDENTIAL_HELPER/$git_credential/g" gitconfig.example > gitconfig
+fi
+
+# load zsh
+if [[ $SHELL != $(which zsh) ]]; then
+  notify "Changing shell to zsh"
+  chsh -s $(which zsh)
+fi
+
+# update vundle
+if [[ ! -d "$HOME/.vim/bundle/neobundle.vim" ]]; then
+  notify "Installing Neobundle"
+  git clone https://github.com/Shougo/neobundle.vim $HOME/.vim/bundle/neobundle.vim
+fi
+
+# environment install
+
+# install brew
+if ! hash brew 2>/dev/null; then
+  notify "Installing homebrew"
+  ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+fi
+notify "Updating homebrew forumlas"
+brew update
+
+# install brew-cask
+# Cask is a sweet utility that allows us to install OSX applications from the command line. GREAT for setting up new macs!
+if [[ -z $(brew list | grep brew-cask) ]]; then
+  notify "Installing homebrew cask"
+  brew install caskroom/cask/brew-cask
+  brew tap caskroom/versions
+fi
+
+cask_ensure alfred	# I am the batman... (option + space for better spotlight-style search tool)
+cask_ensure anvil	# Manage static/rack websites
+cask_ensure iterm2	# Better OSX Terminal
+cask_ensure sublime-text3	# Text/Code Editor
+cask_ensure dropbox	# Box for dropping
+cask_ensure firefox
+cask_ensure google-chrome-beta
+cask_ensure google-drive
+cask_ensure induction	# Useful tool for querying/visualizing data from different platforms
+cask_ensure mou		# Decent Markdown editor
+cask_ensure sequel-pro	# Excellent MySQL GUI tool
+cask_ensure transmission	# BitTorrent client (can be used in terminal)
+cask_ensure transmit	# FTP client (SFTP, S3, etc. Alternative to Cyberduck)
+cask_ensure virtualbox	# Virtualization
+cask_ensure robomongo	# MongoDB GUI
+
+# Make sure Alfred is linked (assuming it's installed)
+#if ! hash /usr/local/bin/icuinfo 2>/dev/null; then
+#  brew cask alfred link
+#fi
+
+# Git
+brew_ensure git ghi	# Show github issues in the command line. Sweet!
+
+# Deps
+# Make sure to tap homebrew/dupes so we can install zlib
+brew tap homebrew/dupes
+
+brew_ensure gnu-sed pidof
+brew_ensure automake autoconf curl pcre re2c mhash libtool icu4c gettext jpeg libxml2 mcrypt gmp libevent zlib
+if ! hash /usr/local/bin/icuinfo 2>/dev/null; then
+  brew link icu4c
+fi
+
+# Tmux
+brew_ensure tmux reattach-to-user-namespace
+
+# SSL
+if [[ -z $(brew list openssl 2>/dev/null) ]]; then
+  notify "Installing openssl"
+  brew install openssl
+  brew unlink openssl && brew link openssl --force
+else
+  brew_ensure openssl
+fi
+
+# Vim
+# This overrides the system 'vi'. If you use 'vim', you'll get a warning about some stuff.
+if [[ -z $(brew list vim 2>/dev/null) ]]; then
+  notify "Installing Vim"
+  brew install vim --with-lua --override-system-vi
+else
+  brew_ensure vim
+fi
+
+# MacVim
+# A full installation of Xcode is REQUIRED for MacVim! The MacVim install will fail without Xcode.app.
+if [[ -z $(brew list macvim 2>/dev/null) ]]; then
+  notify "Installing Mac Vim"
+  brew install macvim --with-lua
+else
+  brew_ensure macvim
+fi
+
+# Vim Utilities
+brew_ensure the_silver_searcher		# Super fast code search
+
+# MariaDB
+# Note: This should be compatible with MySQL databases. Most of my production are running MySQL, but it should be fine to use MariaDB locally!
+if [[ -z $(brew list mariadb 2>/dev/null) ]]; then
+  brew_ensure mariadb
+  unset TMPDIR
+  mysql_install_db --user=`whoami` --basedir="$(brew --prefix mariadb)" --datadir=/usr/local/var/mysql --tmpdir=/tmp
+else
+  brew_ensure mariadb
+fi
+
+# PostgreSQL
+brew_ensure postgresql
+
+# MongoDB
+brew_ensure mongodb
+
+# Redis
+brew_ensure redis
+
+# Ruby
+brew_ensure rbenv ruby-build
+
+# Use thoughtbot's ruby version
+# Might want to change this - why not just always grab the latest stable version directly from a more reliable source?
+ruby_version="$(curl -sSL http://ruby.thoughtbot.com/latest)"
+if [[ -z $(rbenv versions | grep $ruby_version) ]]; then
+  notify "Setting up Ruby $ruby_version"
+  rbenv install -s "$ruby_version"
+  rbenv global "$ruby_version"
+  rbenv rehash
+  gem install bundler capistrano-ext
+fi
+
+# PHP
+# Version 5.5. Be sure to update this as needed
+if [[ -z $(brew list php55 2>/dev/null) ]]; then
+  notify "Setting up PHP 5.5"
+  brew tap homebrew/php
+  brew install php55 --with-homebrew-openssl --without-snmp
+else
+  brew_ensure php55
+fi
+
+brew_ensure php55-redis php55-mongo composer	# Make sure that redis and mongo libraries are ready for use with PHP
+
+# Node.js
+brew_ensure node
+
+# Go-lang
+# brew_ensure go
+
+# Python
+# brew_ensure python
+
+# Flash
+# brew_ensure flex_sdk
+
+# Android
+# brew_ensure android-sdk
+
+# Utils
+brew_ensure grc htop-osx
+
+# Heroku
+brew_ensure heroku-toolbelt
+
+if ! command -v rcup >/dev/null; then
+  notify "Installing rcm, to manage your dotfiles"
+  brew tap thoughtbot/formulae
+fi
+
+brew_ensure 'rcm'	# .rc* management
+
+if [[ -d $HOME/dotfiles ]]; then
+  notify "Running rcup for your dotfiles"
+  env RCRC=$HOME/dotfiles/rcrc rcup
+fi
+
+notify "Loading OSX defaults"
+$PWD/bin/osx-defaults
+
+notify "👌  All done!"
