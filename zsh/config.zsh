@@ -1,7 +1,8 @@
-autoload colors && colors
+# autoload colors && colors
 
-export LSCOLORS="exfxcxdxbxegedabagacad"
-export CLICOLOR=true
+export ZSH_THEME="prose"
+#export LSCOLORS="exfxcxdxbxegedabagacad"
+#export CLICOLOR=true
 
 # fpath=($ZSH/zsh/functions $fpath)
 
@@ -33,9 +34,18 @@ setopt complete_aliases
 
 zle -N newtab
 
-bindkey -v
-bindkey '^?' backward-delete-char
+bindkey -e  # set this to -v for vim mode
 bindkey '^R' history-incremental-search-backward
+
+# oh-my-zsh delete config
+bindkey '^?' backward-delete-char                     # [Backspace] - delete backward
+if [[ "${terminfo[kdch1]}" != "" ]]; then
+  bindkey "${terminfo[kdch1]}" delete-char            # [Delete] - delete forward
+else
+  bindkey "^[[3~" delete-char
+  bindkey "^[3;5~" delete-char
+  bindkey "\e[3~" delete-char
+fi
 
 # vim mode indictator from oh-my-zsh
 MODE_INDICATOR="%B%F{red}%b❮%F{red}❮❮%f"
