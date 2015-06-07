@@ -94,6 +94,7 @@ cask_ensure transmit	# FTP client (SFTP, S3, etc. Alternative to Cyberduck)
 cask_ensure virtualbox	# Virtualization
 cask_ensure robomongo	# MongoDB GUI
 cask_ensure harvest # Harvest time tracking
+cask_ensure vlc # Best video player ever
 
 # Make sure Alfred is linked (assuming it's installed)
 #if ! hash /usr/local/bin/icuinfo 2>/dev/null; then
